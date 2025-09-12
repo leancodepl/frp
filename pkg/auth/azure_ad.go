@@ -4,9 +4,12 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
+	"github.com/MicahParks/keyfunc/v3"
+	"github.com/golang-jwt/jwt/v5"
 
 	v1 "github.com/fatedier/frp/pkg/config/v1"
 	"github.com/fatedier/frp/pkg/msg"
@@ -64,4 +67,88 @@ func (as *AzureADAuthSetter) SetNewWorkConn(newWorkConnMsg *msg.NewWorkConn) (er
 
 	newWorkConnMsg.PrivilegeKey, err = as.generateAccessToken()
 	return err
+}
+
+// Claims represents the expected claims in an Azure AD JWT token
+type Claims struct {
+	Audience jwt.ClaimStrings `json:"aud"`
+	Issuer   string           `json:"iss"`
+	TenantID string           `json:"tid"`
+	jwt.RegisteredClaims
+}
+
+type AzureADAuthVerifier struct {
+	additionalAuthScopes []v1.AuthScope
+	cfg                  v1.AuthAzureADServerConfig
+	jwks                 keyfunc.Keyfunc
+}
+
+func NewAzureADAuthVerifier(additionalAuthScopes []v1.AuthScope, cfg v1.AuthAzureADServerConfig) (*AzureADAuthVerifier, error) {
+	jwksURL := "https://login.microsoftonline.com/common/discovery/v2.0/keys"
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	jwks, err := keyfunc.NewDefaultCtx(ctx, []string{jwksURL})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create JWKS manager: %w", err)
+	}
+	return &AzureADAuthVerifier{
+		additionalAuthScopes: additionalAuthScopes,
+		cfg:                  cfg,
+		jwks:                 jwks,
+	}, nil
+}
+
+func (av *AzureADAuthVerifier) verifyToken(token string) error {
+	claims := &Claims{}
+	parsedToken, err := jwt.ParseWithClaims(token, claims, av.jwks.Keyfunc)
+	if err != nil {
+		return fmt.Errorf("error parsing or validating token signature: %w", err)
+	}
+	if !parsedToken.Valid {
+		return fmt.Errorf("token is invalid")
+	}
+
+	// Validate Audience - check if audience is in the slice
+	audienceFound := false
+	for _, aud := range claims.Audience {
+		if aud == av.cfg.Audience {
+			audienceFound = true
+			break
+		}
+	}
+	if !audienceFound {
+		return fmt.Errorf("invalid audience")
+	}
+
+	// Validate Tenant ID (if configured)
+	if av.cfg.TenantID != "" && claims.TenantID != av.cfg.TenantID {
+		return fmt.Errorf("invalid tenant ID")
+	}
+
+	// Dynamic Issuer validation
+	expectedIssuer := fmt.Sprintf("https://login.microsoftonline.com/%s/v2.0", claims.TenantID)
+	if claims.Issuer != expectedIssuer {
+		return fmt.Errorf("invalid issuer")
+	}
+
+	return nil
+}
+
+func (av *AzureADAuthVerifier) VerifyLogin(m *msg.Login) error {
+	return av.verifyToken(m.PrivilegeKey)
+}
+
+func (av *AzureADAuthVerifier) VerifyPing(m *msg.Ping) error {
+	if !slices.Contains(av.additionalAuthScopes, v1.AuthScopeHeartBeats) {
+		return nil
+	}
+	return av.verifyToken(m.PrivilegeKey)
+}
+
+func (av *AzureADAuthVerifier) VerifyNewWorkConn(m *msg.NewWorkConn) error {
+	if !slices.Contains(av.additionalAuthScopes, v1.AuthScopeNewWorkConns) {
+		return nil
+	}
+	return av.verifyToken(m.PrivilegeKey)
 }
