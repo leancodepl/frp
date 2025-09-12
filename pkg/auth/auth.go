@@ -33,6 +33,8 @@ func NewAuthSetter(cfg v1.AuthClientConfig) (authProvider Setter) {
 		authProvider = NewTokenAuth(cfg.AdditionalScopes, cfg.Token)
 	case v1.AuthMethodOIDC:
 		authProvider = NewOidcAuthSetter(cfg.AdditionalScopes, cfg.OIDC)
+	case v1.AuthMethodAzureAD:
+		authProvider = NewAzureADAuthSetter(cfg.AdditionalScopes, cfg.AzureAD)
 	default:
 		panic(fmt.Sprintf("wrong method: '%s'", cfg.Method))
 	}
@@ -52,6 +54,10 @@ func NewAuthVerifier(cfg v1.AuthServerConfig) (authVerifier Verifier) {
 	case v1.AuthMethodOIDC:
 		tokenVerifier := NewTokenVerifier(cfg.OIDC)
 		authVerifier = NewOidcAuthVerifier(cfg.AdditionalScopes, tokenVerifier)
+	case v1.AuthMethodAzureAD:
+		// TODO: Implement Azure AD token verification on server side
+		// For now, we don't have server-side verification implemented
+		authVerifier = nil
 	}
 	return authVerifier
 }
