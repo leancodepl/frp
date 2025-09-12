@@ -42,8 +42,9 @@ const (
 type AuthMethod string
 
 const (
-	AuthMethodToken AuthMethod = "token"
-	AuthMethodOIDC  AuthMethod = "oidc"
+	AuthMethodToken   AuthMethod = "token"
+	AuthMethodOIDC    AuthMethod = "oidc"
+	AuthMethodAzureAD AuthMethod = "azure_ad"
 )
 
 // QUIC protocol options

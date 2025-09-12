@@ -33,6 +33,7 @@ var (
 	SupportedAuthMethods = []v1.AuthMethod{
 		"token",
 		"oidc",
+		"azure_ad",
 	}
 
 	SupportedAuthAdditionalScopes = []v1.AuthScope{
