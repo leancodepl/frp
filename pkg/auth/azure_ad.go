@@ -126,10 +126,11 @@ func (av *AzureADAuthVerifier) verifyToken(token string) error {
 		return fmt.Errorf("invalid tenant ID")
 	}
 
-	// Dynamic Issuer validation
-	expectedIssuer := fmt.Sprintf("https://login.microsoftonline.com/%s/v2.0", claims.TenantID)
-	if claims.Issuer != expectedIssuer {
-		return fmt.Errorf("invalid issuer")
+	// Dynamic Issuer validation - support both v1.0 and v2.0 formats
+	expectedIssuerV1 := fmt.Sprintf("https://sts.windows.net/%s/", claims.TenantID)
+	expectedIssuerV2 := fmt.Sprintf("https://login.microsoftonline.com/%s/v2.0", claims.TenantID)
+	if claims.Issuer != expectedIssuerV1 && claims.Issuer != expectedIssuerV2 {
+		return fmt.Errorf("invalid issuer: got %s, expected %s or %s", claims.Issuer, expectedIssuerV1, expectedIssuerV2)
 	}
 
 	return nil
