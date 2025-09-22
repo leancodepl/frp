@@ -55,11 +55,7 @@ func NewAuthVerifier(cfg v1.AuthServerConfig) (authVerifier Verifier) {
 		tokenVerifier := NewTokenVerifier(cfg.OIDC)
 		authVerifier = NewOidcAuthVerifier(cfg.AdditionalScopes, tokenVerifier)
 	case v1.AuthMethodAzureAD:
-		azureVerifier, err := NewAzureADAuthVerifier(cfg.AdditionalScopes, cfg.AzureAD)
-		if err != nil {
-			panic(fmt.Sprintf("failed to create Azure AD verifier: %v", err))
-		}
-		authVerifier = azureVerifier
+		authVerifier = NewAzureADAuthVerifier(cfg.AdditionalScopes, cfg.AzureAD)
 	}
 	return authVerifier
 }

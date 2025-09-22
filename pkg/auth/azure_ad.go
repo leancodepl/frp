@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
@@ -13,6 +15,11 @@ import (
 
 	v1 "github.com/fatedier/frp/pkg/config/v1"
 	"github.com/fatedier/frp/pkg/msg"
+)
+
+const (
+	// JWKS cache TTL - refresh every 10 minutes
+	jwksCacheTTL = 10 * time.Minute
 )
 
 type AzureADAuthSetter struct {
@@ -80,33 +87,87 @@ type Claims struct {
 type AzureADAuthVerifier struct {
 	additionalAuthScopes []v1.AuthScope
 	cfg                  v1.AuthAzureADServerConfig
-	jwks                 keyfunc.Keyfunc
+
+	// JWKS cache
+	jwksMutex   sync.RWMutex
+	jwks        keyfunc.Keyfunc
+	jwksExpires time.Time
 }
 
-func NewAzureADAuthVerifier(additionalAuthScopes []v1.AuthScope, cfg v1.AuthAzureADServerConfig) (*AzureADAuthVerifier, error) {
+func NewAzureADAuthVerifier(additionalAuthScopes []v1.AuthScope, cfg v1.AuthAzureADServerConfig) *AzureADAuthVerifier {
+	return &AzureADAuthVerifier{
+		additionalAuthScopes: additionalAuthScopes,
+		cfg:                  cfg,
+	}
+}
+
+// getJWKS returns cached JWKS or fetches fresh ones if cache is expired
+func (av *AzureADAuthVerifier) getJWKS() (keyfunc.Keyfunc, error) {
+	// Try to use cached JWKS first
+	av.jwksMutex.RLock()
+	if av.jwks != nil && time.Now().Before(av.jwksExpires) {
+		jwks := av.jwks
+		av.jwksMutex.RUnlock()
+		return jwks, nil
+	}
+	av.jwksMutex.RUnlock()
+
+	// Cache miss or expired, fetch new JWKS
+	av.jwksMutex.Lock()
+	defer av.jwksMutex.Unlock()
+
+	// Double-check in case another goroutine fetched while we waited for lock
+	if av.jwks != nil && time.Now().Before(av.jwksExpires) {
+		return av.jwks, nil
+	}
+
 	jwksURL := "https://login.microsoftonline.com/common/discovery/v2.0/keys"
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	jwks, err := keyfunc.NewDefaultCtx(ctx, []string{jwksURL})
 	if err != nil {
-		return nil, fmt.Errorf("failed to create JWKS manager: %w", err)
+		return nil, fmt.Errorf("failed to fetch JWKS for token verification: %w", err)
 	}
-	return &AzureADAuthVerifier{
-		additionalAuthScopes: additionalAuthScopes,
-		cfg:                  cfg,
-		jwks:                 jwks,
-	}, nil
+
+	// Cache the JWKS
+	av.jwks = jwks
+	av.jwksExpires = time.Now().Add(jwksCacheTTL)
+
+	return jwks, nil
 }
 
 func (av *AzureADAuthVerifier) verifyToken(token string) error {
-	claims := &Claims{}
-	parsedToken, err := jwt.ParseWithClaims(token, claims, av.jwks.Keyfunc)
+	// Get JWKS (from cache or fetch new)
+	jwks, err := av.getJWKS()
 	if err != nil {
-		return fmt.Errorf("error parsing or validating token signature: %w", err)
+		return err
+	}
+
+	claims := &Claims{}
+	parsedToken, err := jwt.ParseWithClaims(token, claims, jwks.Keyfunc)
+	if err != nil {
+		// Provide detailed error messages for common JWT issues
+		errMsg := err.Error()
+		switch {
+		case strings.Contains(errMsg, "token is expired"):
+			return fmt.Errorf("token validation failed: token has expired")
+		case strings.Contains(errMsg, "token used before valid"):
+			return fmt.Errorf("token validation failed: token is not valid yet")
+		case strings.Contains(errMsg, "invalid audience"):
+			return fmt.Errorf("token validation failed: invalid audience")
+		case strings.Contains(errMsg, "invalid issuer"):
+			return fmt.Errorf("token validation failed: invalid issuer")
+		case strings.Contains(errMsg, "signature is invalid"):
+			return fmt.Errorf("token validation failed: invalid signature")
+		case strings.Contains(errMsg, "token is malformed"):
+			return fmt.Errorf("token validation failed: token is malformed")
+		default:
+			return fmt.Errorf("error parsing or validating token: %w", err)
+		}
 	}
 	if !parsedToken.Valid {
-		return fmt.Errorf("token is invalid")
+		return fmt.Errorf("token is invalid: failed internal validation checks")
 	}
 
 	// Validate Audience - check if audience is in the slice
@@ -118,12 +179,12 @@ func (av *AzureADAuthVerifier) verifyToken(token string) error {
 		}
 	}
 	if !audienceFound {
-		return fmt.Errorf("invalid audience")
+		return fmt.Errorf("invalid audience: expected %s, but token contains %v", av.cfg.Audience, claims.Audience)
 	}
 
 	// Validate Tenant ID (if configured)
 	if av.cfg.TenantID != "" && claims.TenantID != av.cfg.TenantID {
-		return fmt.Errorf("invalid tenant ID")
+		return fmt.Errorf("invalid tenant ID: expected %s, but got %s", av.cfg.TenantID, claims.TenantID)
 	}
 
 	// Dynamic Issuer validation - support both v1.0 and v2.0 formats
