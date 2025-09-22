@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"slices"
 	"strings"
-	"sync"
-	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
@@ -15,11 +13,6 @@ import (
 
 	v1 "github.com/fatedier/frp/pkg/config/v1"
 	"github.com/fatedier/frp/pkg/msg"
-)
-
-const (
-	// JWKS cache TTL - refresh every 10 minutes
-	jwksCacheTTL = 10 * time.Minute
 )
 
 type AzureADAuthSetter struct {
@@ -87,65 +80,30 @@ type Claims struct {
 type AzureADAuthVerifier struct {
 	additionalAuthScopes []v1.AuthScope
 	cfg                  v1.AuthAzureADServerConfig
-
-	// JWKS cache
-	jwksMutex   sync.RWMutex
-	jwks        keyfunc.Keyfunc
-	jwksExpires time.Time
+	jwks                 keyfunc.Keyfunc // Auto-refreshing JWKS with built-in cache
 }
 
-func NewAzureADAuthVerifier(additionalAuthScopes []v1.AuthScope, cfg v1.AuthAzureADServerConfig) *AzureADAuthVerifier {
+func NewAzureADAuthVerifier(additionalAuthScopes []v1.AuthScope, cfg v1.AuthAzureADServerConfig) (*AzureADAuthVerifier, error) {
+	// Use NewDefault for auto-refreshing JWKS with built-in cache
+	jwksURL := "https://login.microsoftonline.com/common/discovery/v2.0/keys"
+	jwks, err := keyfunc.NewDefault([]string{jwksURL})
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize JWKS for Azure AD verification: %w", err)
+	}
+
 	return &AzureADAuthVerifier{
 		additionalAuthScopes: additionalAuthScopes,
 		cfg:                  cfg,
-	}
+		jwks:                 jwks,
+	}, nil
 }
 
-// getJWKS returns cached JWKS or fetches fresh ones if cache is expired
-func (av *AzureADAuthVerifier) getJWKS() (keyfunc.Keyfunc, error) {
-	// Try to use cached JWKS first
-	av.jwksMutex.RLock()
-	if av.jwks != nil && time.Now().Before(av.jwksExpires) {
-		jwks := av.jwks
-		av.jwksMutex.RUnlock()
-		return jwks, nil
-	}
-	av.jwksMutex.RUnlock()
 
-	// Cache miss or expired, fetch new JWKS
-	av.jwksMutex.Lock()
-	defer av.jwksMutex.Unlock()
-
-	// Double-check in case another goroutine fetched while we waited for lock
-	if av.jwks != nil && time.Now().Before(av.jwksExpires) {
-		return av.jwks, nil
-	}
-
-	jwksURL := "https://login.microsoftonline.com/common/discovery/v2.0/keys"
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	jwks, err := keyfunc.NewDefaultCtx(ctx, []string{jwksURL})
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch JWKS for token verification: %w", err)
-	}
-
-	// Cache the JWKS
-	av.jwks = jwks
-	av.jwksExpires = time.Now().Add(jwksCacheTTL)
-
-	return jwks, nil
-}
 
 func (av *AzureADAuthVerifier) verifyToken(token string) error {
-	// Get JWKS (from cache or fetch new)
-	jwks, err := av.getJWKS()
-	if err != nil {
-		return err
-	}
 
 	claims := &Claims{}
-	parsedToken, err := jwt.ParseWithClaims(token, claims, jwks.Keyfunc)
+	parsedToken, err := jwt.ParseWithClaims(token, claims, av.jwks.Keyfunc)
 	if err != nil {
 		// Provide detailed error messages for common JWT issues
 		errMsg := err.Error()

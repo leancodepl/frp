@@ -55,7 +55,13 @@ func NewAuthVerifier(cfg v1.AuthServerConfig) (authVerifier Verifier) {
 		tokenVerifier := NewTokenVerifier(cfg.OIDC)
 		authVerifier = NewOidcAuthVerifier(cfg.AdditionalScopes, tokenVerifier)
 	case v1.AuthMethodAzureAD:
-		authVerifier = NewAzureADAuthVerifier(cfg.AdditionalScopes, cfg.AzureAD)
+		azureVerifier, err := NewAzureADAuthVerifier(cfg.AdditionalScopes, cfg.AzureAD)
+		if err != nil {
+			// Log error and disable auth instead of panicking - graceful degradation
+			fmt.Printf("Warning: Failed to initialize Azure AD auth, authentication disabled: %v\n", err)
+			return nil
+		}
+		authVerifier = azureVerifier
 	}
 	return authVerifier
 }
