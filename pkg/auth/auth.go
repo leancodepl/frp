@@ -33,6 +33,8 @@ func NewAuthSetter(cfg v1.AuthClientConfig) (authProvider Setter) {
 		authProvider = NewTokenAuth(cfg.AdditionalScopes, cfg.Token)
 	case v1.AuthMethodOIDC:
 		authProvider = NewOidcAuthSetter(cfg.AdditionalScopes, cfg.OIDC)
+	case v1.AuthMethodEntraID:
+		authProvider = NewEntraIDAuthSetter(cfg.AdditionalScopes, cfg.EntraID)
 	default:
 		panic(fmt.Sprintf("wrong method: '%s'", cfg.Method))
 	}
@@ -52,6 +54,8 @@ func NewAuthVerifier(cfg v1.AuthServerConfig) (authVerifier Verifier) {
 	case v1.AuthMethodOIDC:
 		tokenVerifier := NewTokenVerifier(cfg.OIDC)
 		authVerifier = NewOidcAuthVerifier(cfg.AdditionalScopes, tokenVerifier)
+	case v1.AuthMethodEntraID:
+		authVerifier = NewEntraIDAuthVerifier(cfg.AdditionalScopes, cfg.EntraID)
 	}
 	return authVerifier
 }

@@ -192,8 +192,9 @@ type AuthClientConfig struct {
 	Token string `json:"token,omitempty"`
 	// TokenSource specifies a dynamic source for the authorization token.
 	// This is mutually exclusive with Token field.
-	TokenSource *ValueSource         `json:"tokenSource,omitempty"`
-	OIDC        AuthOIDCClientConfig `json:"oidc,omitempty"`
+	TokenSource *ValueSource            `json:"tokenSource,omitempty"`
+	OIDC        AuthOIDCClientConfig    `json:"oidc,omitempty"`
+	EntraID     AuthEntraIDClientConfig `json:"entraid,omitempty"`
 }
 
 func (c *AuthClientConfig) Complete() error {
@@ -228,6 +229,12 @@ type AuthOIDCClientConfig struct {
 	// AdditionalEndpointParams specifies additional parameters to be sent
 	// this field will be transfer to map[string][]string in OIDC token generator.
 	AdditionalEndpointParams map[string]string `json:"additionalEndpointParams,omitempty"`
+}
+
+// AuthEntraIDClientConfig contains configuration for Entra ID client authentication.
+type AuthEntraIDClientConfig struct {
+	// Audience specifies the application URI identifier of the frps server.
+	Audience string `json:"audience,omitempty"`
 }
 
 type VirtualNetConfig struct {
