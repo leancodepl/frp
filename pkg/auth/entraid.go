@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"slices"
-	"strings"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
@@ -105,24 +104,7 @@ func (av *EntraIDAuthVerifier) verifyToken(token string) error {
 	claims := &Claims{}
 	parsedToken, err := jwt.ParseWithClaims(token, claims, av.jwks.Keyfunc)
 	if err != nil {
-		// Provide detailed error messages for common JWT issues
-		errMsg := err.Error()
-		switch {
-		case strings.Contains(errMsg, "token is expired"):
-			return fmt.Errorf("token validation failed: token has expired")
-		case strings.Contains(errMsg, "token used before valid"):
-			return fmt.Errorf("token validation failed: token is not valid yet")
-		case strings.Contains(errMsg, "invalid audience"):
-			return fmt.Errorf("token validation failed: invalid audience")
-		case strings.Contains(errMsg, "invalid issuer"):
-			return fmt.Errorf("token validation failed: invalid issuer")
-		case strings.Contains(errMsg, "signature is invalid"):
-			return fmt.Errorf("token validation failed: invalid signature")
-		case strings.Contains(errMsg, "token is malformed"):
-			return fmt.Errorf("token validation failed: token is malformed")
-		default:
-			return fmt.Errorf("error parsing or validating token: %w", err)
-		}
+		return fmt.Errorf("error parsing or validating token: %w", err)
 	}
 	if !parsedToken.Valid {
 		return fmt.Errorf("token is invalid: failed internal validation checks")
