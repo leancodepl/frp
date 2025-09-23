@@ -55,13 +55,7 @@ func NewAuthVerifier(cfg v1.AuthServerConfig) (authVerifier Verifier) {
 		tokenVerifier := NewTokenVerifier(cfg.OIDC)
 		authVerifier = NewOidcAuthVerifier(cfg.AdditionalScopes, tokenVerifier)
 	case v1.AuthMethodEntraID:
-		entraVerifier, err := NewEntraIDAuthVerifier(cfg.AdditionalScopes, cfg.EntraID)
-		if err != nil {
-			// Log error and disable auth instead of panicking - graceful degradation
-			fmt.Printf("Warning: Failed to initialize Entra ID auth, authentication disabled: %v\n", err)
-			return nil
-		}
-		authVerifier = entraVerifier
+		authVerifier = NewEntraIDAuthVerifier(cfg.AdditionalScopes, cfg.EntraID)
 	}
 	return authVerifier
 }

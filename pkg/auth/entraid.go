@@ -82,19 +82,19 @@ type EntraIDAuthVerifier struct {
 	jwks                 keyfunc.Keyfunc // Auto-refreshing JWKS with built-in cache
 }
 
-func NewEntraIDAuthVerifier(additionalAuthScopes []v1.AuthScope, cfg v1.AuthEntraIDServerConfig) (*EntraIDAuthVerifier, error) {
+func NewEntraIDAuthVerifier(additionalAuthScopes []v1.AuthScope, cfg v1.AuthEntraIDServerConfig) *EntraIDAuthVerifier {
 	// Use NewDefault for auto-refreshing JWKS with built-in cache
 	jwksURL := "https://login.microsoftonline.com/common/discovery/v2.0/keys"
 	jwks, err := keyfunc.NewDefault([]string{jwksURL})
 	if err != nil {
-		return nil, fmt.Errorf("failed to initialize JWKS for Entra ID verification: %w", err)
+		panic(err)
 	}
 
 	return &EntraIDAuthVerifier{
 		additionalAuthScopes: additionalAuthScopes,
 		cfg:                  cfg,
 		jwks:                 jwks,
-	}, nil
+	}
 }
 
 
