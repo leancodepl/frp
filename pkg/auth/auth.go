@@ -33,8 +33,8 @@ func NewAuthSetter(cfg v1.AuthClientConfig) (authProvider Setter) {
 		authProvider = NewTokenAuth(cfg.AdditionalScopes, cfg.Token)
 	case v1.AuthMethodOIDC:
 		authProvider = NewOidcAuthSetter(cfg.AdditionalScopes, cfg.OIDC)
-	case v1.AuthMethodAzureAD:
-		authProvider = NewAzureADAuthSetter(cfg.AdditionalScopes, cfg.AzureAD)
+	case v1.AuthMethodEntraID:
+		authProvider = NewEntraIDAuthSetter(cfg.AdditionalScopes, cfg.EntraID)
 	default:
 		panic(fmt.Sprintf("wrong method: '%s'", cfg.Method))
 	}
@@ -54,14 +54,14 @@ func NewAuthVerifier(cfg v1.AuthServerConfig) (authVerifier Verifier) {
 	case v1.AuthMethodOIDC:
 		tokenVerifier := NewTokenVerifier(cfg.OIDC)
 		authVerifier = NewOidcAuthVerifier(cfg.AdditionalScopes, tokenVerifier)
-	case v1.AuthMethodAzureAD:
-		azureVerifier, err := NewAzureADAuthVerifier(cfg.AdditionalScopes, cfg.AzureAD)
+	case v1.AuthMethodEntraID:
+		entraVerifier, err := NewEntraIDAuthVerifier(cfg.AdditionalScopes, cfg.EntraID)
 		if err != nil {
 			// Log error and disable auth instead of panicking - graceful degradation
-			fmt.Printf("Warning: Failed to initialize Azure AD auth, authentication disabled: %v\n", err)
+			fmt.Printf("Warning: Failed to initialize Entra ID auth, authentication disabled: %v\n", err)
 			return nil
 		}
-		authVerifier = azureVerifier
+		authVerifier = entraVerifier
 	}
 	return authVerifier
 }

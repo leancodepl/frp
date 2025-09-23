@@ -15,19 +15,19 @@ import (
 	"github.com/fatedier/frp/pkg/msg"
 )
 
-type AzureADAuthSetter struct {
+type EntraIDAuthSetter struct {
 	additionalAuthScopes []v1.AuthScope
-	cfg                  v1.AuthAzureADClientConfig
+	cfg                  v1.AuthEntraIDClientConfig
 }
 
-func NewAzureADAuthSetter(additionalAuthScopes []v1.AuthScope, cfg v1.AuthAzureADClientConfig) *AzureADAuthSetter {
-	return &AzureADAuthSetter{
+func NewEntraIDAuthSetter(additionalAuthScopes []v1.AuthScope, cfg v1.AuthEntraIDClientConfig) *EntraIDAuthSetter {
+	return &EntraIDAuthSetter{
 		additionalAuthScopes: additionalAuthScopes,
 		cfg:                  cfg,
 	}
 }
 
-func (as *AzureADAuthSetter) generateAccessToken() (accessToken string, err error) {
+func (as *EntraIDAuthSetter) generateAccessToken() (accessToken string, err error) {
 	cred, err := azidentity.NewDefaultAzureCredential(nil)
 	if err != nil {
 		return "", fmt.Errorf("failed to initialize Azure credentials: %w", err)
@@ -46,12 +46,12 @@ func (as *AzureADAuthSetter) generateAccessToken() (accessToken string, err erro
 	return token.Token, nil
 }
 
-func (as *AzureADAuthSetter) SetLogin(loginMsg *msg.Login) (err error) {
+func (as *EntraIDAuthSetter) SetLogin(loginMsg *msg.Login) (err error) {
 	loginMsg.PrivilegeKey, err = as.generateAccessToken()
 	return err
 }
 
-func (as *AzureADAuthSetter) SetPing(pingMsg *msg.Ping) (err error) {
+func (as *EntraIDAuthSetter) SetPing(pingMsg *msg.Ping) (err error) {
 	if !slices.Contains(as.additionalAuthScopes, v1.AuthScopeHeartBeats) {
 		return nil
 	}
@@ -60,7 +60,7 @@ func (as *AzureADAuthSetter) SetPing(pingMsg *msg.Ping) (err error) {
 	return err
 }
 
-func (as *AzureADAuthSetter) SetNewWorkConn(newWorkConnMsg *msg.NewWorkConn) (err error) {
+func (as *EntraIDAuthSetter) SetNewWorkConn(newWorkConnMsg *msg.NewWorkConn) (err error) {
 	if !slices.Contains(as.additionalAuthScopes, v1.AuthScopeNewWorkConns) {
 		return nil
 	}
@@ -77,21 +77,21 @@ type Claims struct {
 	jwt.RegisteredClaims
 }
 
-type AzureADAuthVerifier struct {
+type EntraIDAuthVerifier struct {
 	additionalAuthScopes []v1.AuthScope
-	cfg                  v1.AuthAzureADServerConfig
+	cfg                  v1.AuthEntraIDServerConfig
 	jwks                 keyfunc.Keyfunc // Auto-refreshing JWKS with built-in cache
 }
 
-func NewAzureADAuthVerifier(additionalAuthScopes []v1.AuthScope, cfg v1.AuthAzureADServerConfig) (*AzureADAuthVerifier, error) {
+func NewEntraIDAuthVerifier(additionalAuthScopes []v1.AuthScope, cfg v1.AuthEntraIDServerConfig) (*EntraIDAuthVerifier, error) {
 	// Use NewDefault for auto-refreshing JWKS with built-in cache
 	jwksURL := "https://login.microsoftonline.com/common/discovery/v2.0/keys"
 	jwks, err := keyfunc.NewDefault([]string{jwksURL})
 	if err != nil {
-		return nil, fmt.Errorf("failed to initialize JWKS for Azure AD verification: %w", err)
+		return nil, fmt.Errorf("failed to initialize JWKS for Entra ID verification: %w", err)
 	}
 
-	return &AzureADAuthVerifier{
+	return &EntraIDAuthVerifier{
 		additionalAuthScopes: additionalAuthScopes,
 		cfg:                  cfg,
 		jwks:                 jwks,
@@ -100,7 +100,7 @@ func NewAzureADAuthVerifier(additionalAuthScopes []v1.AuthScope, cfg v1.AuthAzur
 
 
 
-func (av *AzureADAuthVerifier) verifyToken(token string) error {
+func (av *EntraIDAuthVerifier) verifyToken(token string) error {
 
 	claims := &Claims{}
 	parsedToken, err := jwt.ParseWithClaims(token, claims, av.jwks.Keyfunc)
@@ -155,18 +155,18 @@ func (av *AzureADAuthVerifier) verifyToken(token string) error {
 	return nil
 }
 
-func (av *AzureADAuthVerifier) VerifyLogin(m *msg.Login) error {
+func (av *EntraIDAuthVerifier) VerifyLogin(m *msg.Login) error {
 	return av.verifyToken(m.PrivilegeKey)
 }
 
-func (av *AzureADAuthVerifier) VerifyPing(m *msg.Ping) error {
+func (av *EntraIDAuthVerifier) VerifyPing(m *msg.Ping) error {
 	if !slices.Contains(av.additionalAuthScopes, v1.AuthScopeHeartBeats) {
 		return nil
 	}
 	return av.verifyToken(m.PrivilegeKey)
 }
 
-func (av *AzureADAuthVerifier) VerifyNewWorkConn(m *msg.NewWorkConn) error {
+func (av *EntraIDAuthVerifier) VerifyNewWorkConn(m *msg.NewWorkConn) error {
 	if !slices.Contains(av.additionalAuthScopes, v1.AuthScopeNewWorkConns) {
 		return nil
 	}

@@ -194,7 +194,7 @@ type AuthClientConfig struct {
 	// This is mutually exclusive with Token field.
 	TokenSource *ValueSource            `json:"tokenSource,omitempty"`
 	OIDC        AuthOIDCClientConfig    `json:"oidc,omitempty"`
-	AzureAD     AuthAzureADClientConfig `json:"azure_ad,omitempty"`
+	EntraID     AuthEntraIDClientConfig `json:"entraid,omitempty"`
 }
 
 func (c *AuthClientConfig) Complete() error {
@@ -231,8 +231,8 @@ type AuthOIDCClientConfig struct {
 	AdditionalEndpointParams map[string]string `json:"additionalEndpointParams,omitempty"`
 }
 
-// AuthAzureADClientConfig contains configuration for Azure AD client authentication.
-type AuthAzureADClientConfig struct {
+// AuthEntraIDClientConfig contains configuration for Entra ID client authentication.
+type AuthEntraIDClientConfig struct {
 	// Audience specifies the application URI identifier of the frps server.
 	Audience string `json:"audience,omitempty"`
 }

@@ -134,7 +134,7 @@ type AuthServerConfig struct {
 	Token            string                  `json:"token,omitempty"`
 	TokenSource      *ValueSource            `json:"tokenSource,omitempty"`
 	OIDC             AuthOIDCServerConfig    `json:"oidc,omitempty"`
-	AzureAD          AuthAzureADServerConfig `json:"azure_ad,omitempty"`
+	EntraID          AuthEntraIDServerConfig `json:"entraid,omitempty"`
 }
 
 func (c *AuthServerConfig) Complete() error {
@@ -169,8 +169,8 @@ type AuthOIDCServerConfig struct {
 	SkipIssuerCheck bool `json:"skipIssuerCheck,omitempty"`
 }
 
-// AuthAzureADServerConfig contains configuration for Azure AD server authentication.
-type AuthAzureADServerConfig struct {
+// AuthEntraIDServerConfig contains configuration for Entra ID server authentication.
+type AuthEntraIDServerConfig struct {
 	// Audience specifies the application URI identifier of the frps server.
 	Audience string `json:"audience,omitempty"`
 	// TenantID (optional) restricts authentication to a specific tenant.
